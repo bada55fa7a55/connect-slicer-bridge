@@ -189,19 +189,19 @@ func apiKey(w http.ResponseWriter, r *http.Request) (string, bool) {
 }
 
 func badRequest(msg string) error {
-	return &apiError{Status: http.StatusBadRequest, Title: msg}
+	return &bridgeError{Status: http.StatusBadRequest, Msg: msg}
 }
 
 func (b *bridge) fail(w http.ResponseWriter, r *http.Request, err error) {
 	status := http.StatusBadGateway
-	msg := "cannot reach Prusa Connect: " + err.Error()
+	msg := "Cannot reach Prusa Connect: " + err.Error()
+	var bridgeErr *bridgeError
 	var apiErr *apiError
-	if errors.As(err, &apiErr) {
-		status = apiErr.Status
-		msg = apiErr.Error()
-		if apiErr.Code == "" && status == http.StatusBadRequest {
-			msg = apiErr.Title
-		}
+	switch {
+	case errors.As(err, &bridgeErr):
+		status, msg = bridgeErr.Status, bridgeErr.Msg
+	case errors.As(err, &apiErr):
+		status, msg = apiErr.Status, apiErr.Error()
 	}
 	b.log.Warn("request failed", "method", r.Method, "path", r.URL.Path, "status", status, "error", msg)
 	http.Error(w, msg, status)

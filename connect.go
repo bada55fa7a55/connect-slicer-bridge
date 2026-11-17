@@ -24,6 +24,13 @@ type apiError struct {
 	Detail string `json:"detail"`
 }
 
+type bridgeError struct {
+	Status int
+	Msg    string
+}
+
+func (e *bridgeError) Error() string { return e.Msg }
+
 func (e *apiError) Error() string {
 	msg := e.Title
 	if e.Detail != "" && e.Detail != e.Title {
@@ -129,7 +136,7 @@ func (c *connectClient) findDevice(ctx context.Context, token, id string) (devic
 	if err != nil {
 		return device{}, err
 	}
-	return device{}, &apiError{Status: http.StatusNotFound, Title: fmt.Sprintf("no printer with the UUID %q is visible to this API key", id), Detail: available(devices)}
+	return device{}, &bridgeError{Status: http.StatusNotFound, Msg: fmt.Sprintf("No printer with the UUID %q is visible to this API key.\n\n%s", id, available(devices))}
 }
 
 func (c *connectClient) upload(ctx context.Context, token, storage, path string, temporary bool, body io.Reader) (savedObject, error) {
@@ -156,7 +163,7 @@ func (c *connectClient) printFile(ctx context.Context, token, deviceID string, f
 		if reason == "" {
 			reason = res.Command.FaultCode
 		}
-		return &apiError{Status: http.StatusConflict, Title: "the file arrived but the printer refused to start it", Detail: reason}
+		return &bridgeError{Status: http.StatusConflict, Msg: "The file is on the printer, but the printer refused to start it: " + reason}
 	}
 	return nil
 }
@@ -171,11 +178,11 @@ func (c *connectClient) postJSON(ctx context.Context, token, path string, in, ou
 
 func available(devices []device) string {
 	if len(devices) == 0 {
-		return "this API key sees no printers"
+		return "This API key can't see any printers."
 	}
-	names := make([]string, len(devices))
+	lines := make([]string, len(devices))
 	for i, d := range devices {
-		names[i] = fmt.Sprintf("%s: %s", d.Name, d.ID)
+		lines[i] = fmt.Sprintf("%s: %s", d.Name, d.ID)
 	}
-	return "printers this key can see: " + strings.Join(names, ", ")
+	return "Printers this API key can see:\n" + strings.Join(lines, "\n")
 }

@@ -31,6 +31,16 @@ Prusa Connect is in beta and its API can change between releases.
 
 ## Run it
 
+Run the bridge on any machine that the computer running PrusaSlicer can
+reach and that can itself reach the Prusa Connect server. The machine that
+runs Connect is the obvious place. Replace `<connect host>` with the address
+of your Prusa Connect server, and `8080` with its port if you changed it.
+
+### Docker Compose
+
+Save this as `compose.yaml` in an empty folder and start it with
+`docker compose up -d`:
+
 ```yaml
 services:
   connect-slicer-bridge:
@@ -42,7 +52,74 @@ services:
       CONNECT_URL: http://<connect host>:8080
 ```
 
-Or run the binary: `connect-slicer-bridge -connect http://<connect host>:8080`.
+### Docker Compose, next to Prusa Connect
+
+If Prusa Connect runs from Prusa's own compose file on the same machine,
+the bridge can talk to it over Docker's network instead of the LAN. Prusa's
+compose file names the container `prusa_connect` and the network
+`prusa_connect_backend`. Join that network, without editing Prusa's files:
+
+```yaml
+services:
+  connect-slicer-bridge:
+    image: ghcr.io/bada55fa7a55/connect-slicer-bridge:latest
+    restart: unless-stopped
+    ports:
+      - "17481:17481"
+    environment:
+      CONNECT_URL: http://prusa_connect:8080
+    networks:
+      - prusa_connect_backend
+
+networks:
+  prusa_connect_backend:
+    external: true
+```
+
+Start Prusa Connect first, because it creates the network. If you changed
+Connect's port in its `config.yaml`, use that port here too: it's the port
+inside the container, not the published one.
+
+### Docker
+
+```sh
+docker run -d --name connect-slicer-bridge --restart unless-stopped \
+  -p 17481:17481 \
+  -e CONNECT_URL=http://<connect host>:8080 \
+  ghcr.io/bada55fa7a55/connect-slicer-bridge:latest
+```
+
+### Without Docker
+
+Download the binary for your system from
+[Releases](https://github.com/bada55fa7a55/connect-slicer-bridge/releases)
+and check it against `SHA256SUMS`. There are builds for Linux (amd64, arm64,
+armv7 for 32-bit Raspberry Pi OS), macOS and Windows. Then run it:
+
+```sh
+chmod +x connect-slicer-bridge_linux_amd64
+./connect-slicer-bridge_linux_amd64 -connect http://<connect host>:8080
+```
+
+The macOS builds are not signed. macOS blocks them until you run
+`xattr -d com.apple.quarantine <file>`.
+
+Or build it with Go:
+
+```sh
+go install github.com/bada55fa7a55/connect-slicer-bridge@latest
+connect-slicer-bridge -connect http://<connect host>:8080
+```
+
+### Check that it runs
+
+`http://<bridge host>:17481/healthz` answers `204 No Content`. The log
+prints `listening` with the address and the Connect URL at startup.
+
+## Configuration
+
+Every setting is a command-line flag or an environment variable. Only the
+Connect URL is required.
 
 | flag | env | default | |
 |---|---|---|---|
