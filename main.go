@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -26,11 +28,19 @@ func run() error {
 	connectURL := flag.String("connect", env("CONNECT_URL", ""), "base URL of the Prusa Connect server")
 	storage := flag.String("storage", env("CONNECT_STORAGE", "local"), "Prusa Connect storage that receives uploads")
 	printerStorage := flag.String("printer-storage", env("PRINTER_STORAGE", "usb"), "storage on the printer that files are sent to")
-	keepFolder := flag.String("keep", env("KEEP_FOLDER", ""), "keep uploads in this folder of the Connect storage instead of as temporary copies")
+	folder := flag.String("folder", env("UPLOAD_FOLDER", ""), "folder of the Connect storage that keeps uploads")
+	temporaryDefault, err := strconv.ParseBool(env("TEMPORARY_UPLOADS", "false"))
+	if err != nil {
+		return fmt.Errorf("TEMPORARY_UPLOADS must be true or false, not %q", os.Getenv("TEMPORARY_UPLOADS"))
+	}
+	temporary := flag.Bool("temporary", temporaryDefault, "upload temporary copies that Connect deletes once they reach the printer")
 	flag.Parse()
 
 	if *connectURL == "" {
 		return errors.New("-connect or CONNECT_URL is required")
+	}
+	if *temporary && *folder != "" {
+		return errors.New("-folder has no effect with -temporary: Connect picks where temporary copies go")
 	}
 	base, err := url.Parse(*connectURL)
 	if err != nil || base.Scheme == "" || base.Host == "" {
@@ -42,7 +52,8 @@ func run() error {
 		connect:        &connectClient{base: base, http: &http.Client{}},
 		storage:        *storage,
 		printerStorage: *printerStorage,
-		keepFolder:     *keepFolder,
+		folder:         strings.Trim(*folder, "/"),
+		temporary:      *temporary,
 		log:            log,
 	}
 

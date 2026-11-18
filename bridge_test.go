@@ -92,7 +92,7 @@ func (f *fakeConnect) handler() http.Handler {
 	return mux
 }
 
-func setup(t *testing.T, keep string) (*fakeConnect, *httptest.Server) {
+func setup(t *testing.T, opts ...func(*bridge)) (*fakeConnect, *httptest.Server) {
 	t.Helper()
 	fake := &fakeConnect{
 		devices: []device{
@@ -108,8 +108,10 @@ func setup(t *testing.T, keep string) (*fakeConnect, *httptest.Server) {
 		connect:        &connectClient{base: base, http: connect.Client()},
 		storage:        "local",
 		printerStorage: "usb",
-		keepFolder:     keep,
 		log:            slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+	for _, opt := range opts {
+		opt(b)
 	}
 	srv := httptest.NewServer(b.routes())
 	t.Cleanup(srv.Close)
@@ -158,7 +160,7 @@ func upload(t *testing.T, url, key, filename string, content []byte, fields ...f
 }
 
 func TestVersionSatisfiesPrusaSlicer(t *testing.T) {
-	_, srv := setup(t, "")
+	_, srv := setup(t)
 	for _, ref := range []string{"9f2a4c18"} {
 		resp, body := get(t, srv.URL+"/"+ref+"/api/version", testToken)
 		if resp.StatusCode != 200 {
@@ -173,7 +175,7 @@ func TestVersionSatisfiesPrusaSlicer(t *testing.T) {
 }
 
 func TestVersionErrors(t *testing.T) {
-	_, srv := setup(t, "")
+	_, srv := setup(t)
 	cases := []struct {
 		name, ref, key string
 		status         int
@@ -192,7 +194,7 @@ func TestVersionErrors(t *testing.T) {
 }
 
 func TestUnknownPrinterListsValidNames(t *testing.T) {
-	_, srv := setup(t, "")
+	_, srv := setup(t)
 	resp, body := get(t, srv.URL+"/xl/api/version", testToken)
 	if resp.StatusCode != 404 {
 		t.Fatalf("status %d: %s", resp.StatusCode, body)
@@ -205,17 +207,17 @@ func TestUnknownPrinterListsValidNames(t *testing.T) {
 }
 
 func TestUploadSendsToPrinter(t *testing.T) {
-	fake, srv := setup(t, "")
+	fake, srv := setup(t)
 	content := []byte("GCDE binary gcode")
 	resp, body := upload(t, srv.URL+"/9f2a4c18/api/files/local", testToken, "bracket.bgcode", content,
 		field{"print", "false"}, field{"path", "parts"})
 	if resp.StatusCode != 201 {
 		t.Fatalf("status %d: %s", resp.StatusCode, body)
 	}
-	if got := fake.uploads[".tmp/abc/bracket.bgcode"]; !bytes.Equal(got, content) {
+	if got := fake.uploads["bracket.bgcode"]; !bytes.Equal(got, content) {
 		t.Fatalf("stored %q, want %q", got, content)
 	}
-	want := printerFile{Path: "usb/parts/bracket.bgcode", Storage: "local", Source: ".tmp/abc/bracket.bgcode", Replace: true}
+	want := printerFile{Path: "usb/parts/bracket.bgcode", Storage: "local", Source: "bracket.bgcode", Replace: true}
 	if len(fake.sent) != 1 || fake.sent[0] != want {
 		t.Fatalf("sent %+v, want %+v", fake.sent, want)
 	}
@@ -228,7 +230,7 @@ func TestUploadSendsToPrinter(t *testing.T) {
 }
 
 func TestUploadAndPrint(t *testing.T) {
-	fake, srv := setup(t, "")
+	fake, srv := setup(t)
 	resp, body := upload(t, srv.URL+"/9f2a4c18/api/files/local", testToken, "bracket.bgcode", []byte("x"),
 		field{"print", "true"}, field{"path", ""})
 	if resp.StatusCode != 201 {
@@ -240,7 +242,7 @@ func TestUploadAndPrint(t *testing.T) {
 }
 
 func TestPrintRefusedIsReported(t *testing.T) {
-	fake, srv := setup(t, "")
+	fake, srv := setup(t)
 	fake.refuse = true
 	resp, body := upload(t, srv.URL+"/9f2a4c18/api/files/local", testToken, "bracket.bgcode", []byte("x"), field{"print", "true"})
 	if resp.StatusCode != 409 || !strings.Contains(body, "printer is busy") {
@@ -248,8 +250,8 @@ func TestPrintRefusedIsReported(t *testing.T) {
 	}
 }
 
-func TestKeepFolderStoresPermanently(t *testing.T) {
-	fake, srv := setup(t, "slicer")
+func TestUploadFolder(t *testing.T) {
+	fake, srv := setup(t, func(b *bridge) { b.folder = "slicer" })
 	resp, body := upload(t, srv.URL+"/9f2a4c18/api/files/local", testToken, "bracket.bgcode", []byte("x"), field{"print", "false"})
 	if resp.StatusCode != 201 {
 		t.Fatalf("status %d: %s", resp.StatusCode, body)
@@ -262,8 +264,22 @@ func TestKeepFolderStoresPermanently(t *testing.T) {
 	}
 }
 
+func TestTemporaryUploads(t *testing.T) {
+	fake, srv := setup(t, func(b *bridge) { b.temporary = true })
+	resp, body := upload(t, srv.URL+"/9f2a4c18/api/files/local", testToken, "bracket.bgcode", []byte("x"), field{"print", "false"})
+	if resp.StatusCode != 201 {
+		t.Fatalf("status %d: %s", resp.StatusCode, body)
+	}
+	if _, ok := fake.uploads[".tmp/abc/bracket.bgcode"]; !ok {
+		t.Fatalf("uploads %v", fake.uploads)
+	}
+	if fake.sent[0].Source != ".tmp/abc/bracket.bgcode" {
+		t.Fatalf("source %q", fake.sent[0].Source)
+	}
+}
+
 func TestUploadRejectsBadInput(t *testing.T) {
-	_, srv := setup(t, "")
+	_, srv := setup(t)
 	cases := []struct {
 		name     string
 		filename string
@@ -282,7 +298,7 @@ func TestUploadRejectsBadInput(t *testing.T) {
 }
 
 func TestWindowsFileNameIsReducedToBase(t *testing.T) {
-	fake, srv := setup(t, "")
+	fake, srv := setup(t)
 	resp, body := upload(t, srv.URL+"/9f2a4c18/api/files/local", testToken, `C:\Users\me\..\part.bgcode`, []byte("x"))
 	if resp.StatusCode != 201 {
 		t.Fatalf("status %d: %s", resp.StatusCode, body)

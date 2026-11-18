@@ -19,7 +19,8 @@ type bridge struct {
 	connect        *connectClient
 	storage        string
 	printerStorage string
-	keepFolder     string
+	folder         string
+	temporary      bool
 	log            *slog.Logger
 }
 
@@ -138,12 +139,11 @@ func (b *bridge) storeFile(r *http.Request, token string, part *multipart.Part, 
 	}
 	form.filename = name
 
-	keep := b.keepFolder != ""
 	target := name
-	if keep {
-		target = path.Join(b.keepFolder, name)
+	if !b.temporary {
+		target = path.Join(b.folder, name)
 	}
-	saved, err := b.connect.upload(r.Context(), token, b.storage, target, !keep, part)
+	saved, err := b.connect.upload(r.Context(), token, b.storage, target, b.temporary, part)
 	if err != nil {
 		return err
 	}

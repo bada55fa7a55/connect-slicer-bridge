@@ -132,7 +132,8 @@ Connect URL is required.
 | `-listen` | `LISTEN_ADDR` | `:17481` | Address to listen on |
 | `-storage` | `CONNECT_STORAGE` | `local` | Connect storage that receives uploads |
 | `-printer-storage` | `PRINTER_STORAGE` | `usb` | Storage on the printer that files go to |
-| `-keep` | `KEEP_FOLDER` | | Keep uploads in this folder of the Connect storage. Without it, uploads are temporary copies that Connect removes |
+| `-folder` | `UPLOAD_FOLDER` | | Folder of the Connect storage that keeps uploads. Empty is the top of the storage |
+| `-temporary` | `TEMPORARY_UPLOADS` | `false` | Upload temporary copies instead, which Connect deletes once they reach the printer |
 
 ## Set up PrusaSlicer
 
@@ -153,8 +154,11 @@ Add one physical printer per printer.
 
 **Upload** puts the file on the printer's USB drive. **Upload and Print**
 also starts it. Uploading a file whose name is already on the drive replaces
-the old one. PrusaSlicer's upload queue shows Connect's error if the printer
-refuses, for example because it is already printing.
+the old one. Like Prusa's cloud Connect, the local Connect keeps a copy of
+every upload in its storage, so you can print it again from Connect. Nothing
+deletes those copies; use `-temporary` if you don't want them.
+PrusaSlicer's upload queue shows Connect's error if the printer refuses, for
+example because it is already printing.
 
 ## Security
 
