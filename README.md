@@ -20,6 +20,11 @@ Connect decides what that key is allowed to do.
 
 This project is not affiliated with or endorsed by Prusa Research.
 
+If you'd rather not run a separate service,
+[connect-octoprint-upload](https://github.com/ZachGoldberg/connect-octoprint-upload)
+does the same job as a Prusa Connect extension, which Connect installs and runs
+itself.
+
 ## Compatibility
 
 | | |
