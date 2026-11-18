@@ -156,6 +156,14 @@ refuses, for example because it is already printing.
 The bridge speaks plain HTTP, just like Prusa Connect's default setup. Run
 it only on a network you trust. The token travels in the `X-Api-Key` header.
 
+## Vibe coded
+
+This project was vibe coded: an AI assistant wrote the code, and a human
+pointed it at the problem and checked that the result works. It has tests,
+it ran against Prusa Connect's printer simulator, and it printed on a real
+MK4S. A human has not reviewed every line, though. Read the code before you
+trust it with your printer. It's short.
+
 ## License
 
 MIT
